@@ -3,6 +3,9 @@ import time
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
+# Global flag to determine if processing should occur
+process_files = True
+
 def modify_idstv(filepath):
     with open(filepath, 'r') as file:
         lines = file.readlines()
@@ -46,11 +49,17 @@ def modify_nc1(filepath):
 
 class FileWatchHandler(FileSystemEventHandler):
     def on_modified(self, event):
-        if not event.is_directory:
+        global process_files
+        if not event.is_directory and process_files:
+            # Temporarily disable processing
+            process_files = False
             if event.src_path.endswith('.idstv'):
                 modify_idstv(event.src_path)
             elif event.src_path.endswith('.nc1'):
                 modify_nc1(event.src_path)
+            # Re-enable processing
+            process_files = True
+
 
 def main():
     path_to_watch = "C:\\Users\\fab.automation\\Desktop\\Testing angle Processer"
