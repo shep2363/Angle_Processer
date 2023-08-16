@@ -3,8 +3,7 @@ import time
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-# Global flag to determine if processing should occur
-process_files = True
+last_processed = {}
 
 def modify_idstv(filepath):
     with open(filepath, 'r') as file:
@@ -49,16 +48,22 @@ def modify_nc1(filepath):
 
 class FileWatchHandler(FileSystemEventHandler):
     def on_modified(self, event):
-        global process_files
-        if not event.is_directory and process_files:
-            # Temporarily disable processing
-            process_files = False
+        global last_processed
+        
+        current_time = time.time()
+        if event.src_path in last_processed and current_time - last_processed[event.src_path] < 5:
+            # If the file was processed less than 5 seconds ago, skip it
+            return
+        
+        if not event.is_directory:
             if event.src_path.endswith('.idstv'):
                 modify_idstv(event.src_path)
             elif event.src_path.endswith('.nc1'):
                 modify_nc1(event.src_path)
-            # Re-enable processing
-            process_files = True
+            
+            # Update the last processed time for the file
+            last_processed[event.src_path] = current_time
+
 
 
 def main():
