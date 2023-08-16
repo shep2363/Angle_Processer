@@ -5,13 +5,12 @@ from watchdog.events import FileSystemEventHandler
 
 last_processed = {}
 
+# Function to modify .idstv files
 def modify_idstv(filepath):
     with open(filepath, 'r') as file:
         lines = file.readlines()
 
     if len(lines) > 10 and "<ProfileType>L</ProfileType>" in lines[9]:
-        print(f"Modifying .idstv file: {filepath}")
-
         length_pattern = re.compile(r'<Length>(\d+)</Length>')
         tags_to_modify = ['Filename', 'DrawingIdentification', 'PieceIdentification']
 
@@ -26,10 +25,13 @@ def modify_idstv(filepath):
                         end = line.find(end_tag)
                         modified_value = line[start:end].replace('0', '')
                         lines[index] = line[:start] + modified_value + line[end:]
+        
+        time.sleep(0.1)  # Delay before writing back to the file
 
         with open(filepath, 'w') as file:
             file.writelines(lines)
 
+# Function to modify .nc1 files
 def modify_nc1(filepath):
     with open(filepath, 'r') as file:
         lines = file.readlines()
@@ -37,37 +39,40 @@ def modify_nc1(filepath):
     if len(lines) > 10:
         try:
             length_value = float(lines[10].strip())
-            print(f"Modifying .nc1 file: {filepath} with length: {length_value}")
-            if length_value < 279:
-                for i in [3, 4]:
-                    lines[i] = lines[i].replace('0', '')
-            with open(filepath, 'w') as file:
-                file.writelines(lines)
         except ValueError:
-            print(f"Skipping .nc1 file {filepath} due to invalid length value")
-
-class FileWatchHandler(FileSystemEventHandler):
-    def on_modified(self, event):
-        global last_processed
-        
-        current_time = time.time()
-        if event.src_path in last_processed and current_time - last_processed[event.src_path] < 5:
-            # If the file was processed less than 5 seconds ago, skip it
             return
         
-        if not event.is_directory:
-            if event.src_path.endswith('.idstv'):
-                modify_idstv(event.src_path)
-            elif event.src_path.endswith('.nc1'):
-                modify_nc1(event.src_path)
-            
-            # Update the last processed time for the file
-            last_processed[event.src_path] = current_time
+        if length_value < 279:
+            for i in [3, 4]:
+                lines[i] = lines[i].replace('0', '')
 
+        time.sleep(0.1)  # Delay before writing back to the file
 
+        with open(filepath, 'w') as file:
+            file.writelines(lines)
+
+# Watchdog's handler for file changes
+class FileWatchHandler(FileSystemEventHandler):
+    def on_modified(self, event):
+        if event.is_directory:
+            return
+
+        current_time = time.time()
+        if event.src_path in last_processed and current_time - last_processed[event.src_path] < 5:
+            return
+        
+        if event.src_path.endswith('.idstv'):
+            modify_idstv(event.src_path)
+            print(f"Modified .idstv file: {event.src_path}")
+        elif event.src_path.endswith('.nc1'):
+            modify_nc1(event.src_path)
+            print(f"Modified .nc1 file: {event.src_path}")
+
+        last_processed[event.src_path] = current_time
 
 def main():
     path_to_watch = "C:\\Users\\fab.automation\\Desktop\\Testing angle Processer"
+
     print(f"Waiting for 15 seconds before starting...")
     time.sleep(15)
 
@@ -75,14 +80,14 @@ def main():
     observer = Observer()
     observer.schedule(event_handler, path=path_to_watch, recursive=False)
 
-    print(f"Watching changes in directory: {path_to_watch}")
-
     try:
         observer.start()
+        print(f"Watching changes in directory: {path_to_watch}")
         while True:
-            time.sleep(1)  # This prevents maxing out CPU usage with a tight loop
+            time.sleep(1)  # Reduce CPU usage by introducing a slight pause in the infinite loop
     except KeyboardInterrupt:
         observer.stop()
+    
     observer.join()
 
 if __name__ == "__main__":
