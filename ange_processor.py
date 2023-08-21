@@ -29,21 +29,27 @@ def modify_nc1(filepath):
     with open(filepath, 'r') as file:
         lines = file.readlines()
 
-    # Check line 11 for the length value
+    # Ensure there are more than 10 lines in the file
     if len(lines) > 10:
         try:
+            # Extract the length value from line 11
             length_value = float(lines[10].strip())
         except ValueError:
-            # If line 11 doesn't contain a numeric value, skip the modifications
-            return
-        
-        if length_value < 279:
-            # Modify lines 4 and 5 to remove zeros
-            for i in [3, 4]:  # Lines 4 and 5 have indices 3 and 4
-                lines[i] = lines[i].replace('0', '')
+            # If line 11 doesn't contain a numeric value, exit the function
+            return 1
 
-        with open(filepath, 'w') as file:
-            file.writelines(lines)
+        # Check if the length_value is less than 279
+        if length_value < 279:
+            # Check if lines 4 and 5 have a zero between the third last and last characters
+            for i in [3, 4]:  # Lines 4 and 5 have indices 3 and 4
+                if lines[i][-2] == '0':  # Check the second-last character for zero
+                    # Modify lines 4 and 5 to remove zeros from the first 14 characters
+                    lines[i] = lines[i][:14].replace('0', '') + lines[i][14:]
+
+    # Write back the modified content
+    with open(filepath, 'w') as file:
+        file.writelines(lines)
+
 
 def list_files_in_directory(directory, extension):
     """Return a list of filenames with the given extension in the specified directory."""
