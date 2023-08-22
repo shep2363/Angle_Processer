@@ -43,8 +43,9 @@ def process_idstv_files_in_directory_updated(directory):
                         parts = main_content.split('-')
                         
                         if len(parts) > 2:
-                            parts[1:-1] = [part.lstrip('0') for part in parts[1:-1]]
+                            parts[1] = parts[1].replace('0','')
                             main_content = '-'.join(parts)
+                        
                         
                         return before + main_content + after
                     
@@ -113,6 +114,21 @@ def modify_nc1(filepath):
     with open(filepath, 'w') as file:
         file.writelines(lines)
 
+def rename_nc1_files(directory):
+    """
+    Renames .nc1 files in the given directory based on the logic to remove zeros.
+    """
+    nc1_files = [f for f in os.listdir(directory) if f.endswith(".nc1")]
+    
+    for filename in nc1_files:
+        new_filename = transform_id(filename)  # Using your existing transform_id function
+        old_filepath = os.path.join(directory, filename)
+        new_filepath = os.path.join(directory, new_filename)
+        
+        # Rename the file
+        os.rename(old_filepath, new_filepath)
+
+
 def list_files_in_directory(directory, extension):
     """Return a list of filenames with the given extension in the specified directory."""
     with os.scandir(directory) as entries:
@@ -133,6 +149,7 @@ def main():
     
     for file in nc1_files:
         modify_nc1(file)
-
+        
+    rename_nc1_files(directory) 
 if __name__ == "__main__":
     main()
