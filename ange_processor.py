@@ -47,19 +47,20 @@ def process_idstv_files_in_directory(directory):
                 for tag in ['Filename', 'DrawingIdentification', 'PieceIdentification']:
                     pattern = fr'(<{tag}>)(.*?)(</{tag}>)'
                     content = re.sub(pattern, remove_inner_zeros, content)
-                    print(content)
                     pattern = fr'(<{tag}>)(.*?-)(.)(0+)([^0].*?)(</{tag}>)'
                     content = re.sub(pattern, remove_zeros_after_last_dash, content)
                     
                     length_pattern = re.compile(r'<Length>(\d+)</Length>')
                     length_match = length_pattern.search(content)
                     
-                    if length_match:
-                        length = int(length_match.group(1))
-                        if length < 279:
-                            print(f"Length is less than 279 for file {idstv_file}.")
-                            with open(idstv_file, 'w') as file:
-                                file.write(content)
+                    if not length_match:
+                        break
+
+                    length = int(length_match.group(1))
+                    if length < 279:
+                        print(f"Length is less than 279 for file {idstv_file}.")
+                        with open(idstv_file, 'w') as file:
+                            file.write(content)
                 
                 rename_nc1_files(directory)
                 print(f"{idstv_file} has been processed.")
