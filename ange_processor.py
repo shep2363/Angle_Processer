@@ -27,50 +27,60 @@ def process_idstv_files_in_directory_updated(directory):
     idstv_files = [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(".idstv")]
 
     for idstv_file in idstv_files:
-        while True:
-            try:
-                with open(idstv_file, 'r') as file:
-                    content = file.read()
+        
+        try:
+            with open(idstv_file, 'r') as file:
+                content = file.read()
 
-                # Process the specific tags
-                for tag in ['Filename', 'DrawingIdentification', 'PieceIdentification']:
+            # Process the specific tags
+            for tag in ['Filename', 'DrawingIdentification', 'PieceIdentification']:
+                if len(content) > 9 and "<ProfileType>L</ProfileType>" in content[9]:
                     
-                    # Remove zeros between the first and last dashes
-                    def remove_inner_zeros(match):
-                        before, main_content, after = match.groups()
-                        print(before, main_content, after)
-                        # Split by dash, process inner parts and rejoin
-                        parts = main_content.split('-')
-                        
-                        if len(parts) > 2:
-                            parts[1] = parts[1].replace('0','')
-                            main_content = '-'.join(parts)
-                        
-                        
-                        return before + main_content + after
-                    
-                    pattern = fr'(<{tag}>)(.*?)(</{tag}>)'
-                    content = re.sub(pattern, remove_inner_zeros, content)
+                
+                    length_pattern = re.compile(r'<Length>(\d+)</Length>')
+                    length_match = length_pattern.search(content)
+                    if length_match:
+                        length = int(length_match.group(1))
+                        if length < 279:
+                            
 
-                    # After the last dash and the first character following it, remove zeros up to the first character
-                    def remove_zeros_after_last_dash(match):
-                        before, upto_last_dash, first_char_after_dash, zeros, remaining, after = match.groups()
-                        return before + upto_last_dash + first_char_after_dash + remaining + after
-                    
-                    pattern = fr'(<{tag}>)(.*?-)(.)(0+)([^0].*?)(</{tag}>)'
-                    content = re.sub(pattern, remove_zeros_after_last_dash, content)
-                    
+                
+                
+                # Remove zeros between the first and last dashes
+                            def remove_inner_zeros(match):
+                                before, main_content, after = match.groups()
+                                
+                                # Split by dash, process inner parts and rejoin
+                                parts = main_content.split('-')
+                                if len(parts) > 2:
+                                    parts[1] = parts[1].replace('0','')
+                                    main_content = '-'.join(parts)
+                                return before + main_content + after
+                            
+                            pattern = fr'(<{tag}>)(.*?)(</{tag}>)'
+                            content = re.sub(pattern, remove_inner_zeros, content)
 
-                with open(idstv_file, 'w') as file:
-                    file.write(content)
-                break  
-            except PermissionError:
-                print(f"Waiting for file {idstv_file} to be released")
-                time.sleep(1)
+                            # After the last dash and the first character following it, remove zeros up to the first character
+                            def remove_zeros_after_last_dash(match):
+                                before, upto_last_dash, first_char_after_dash, zeros, remaining, after = match.groups()
+                                return before + upto_last_dash + first_char_after_dash + remaining + after
+                            
+                            pattern = fr'(<{tag}>)(.*?-)(.)(0+)([^0].*?)(</{tag}>)'
+                            content = re.sub(pattern, remove_zeros_after_last_dash, content)
+
+                        with open(idstv_file, 'w') as file:
+                            file.write(content)
+                            rename_nc1_files(directory) 
+
+
+                         
+        except PermissionError:
+            print(f"Waiting for file {idstv_file} to be released")
+            time.sleep(1)
+
 
 def main_updated():
     directory = input("Please enter the directory containing .idstv and .nc1 files: ")
-
     idstv_files = list_files_in_directory(directory, ".idstv")
     nc1_files = list_files_in_directory(directory, ".nc1")
 
@@ -82,12 +92,6 @@ def main_updated():
     
     for file in nc1_files:
         modify_nc1(file)
-
-# Displaying the updated main function for clarity
-main_updated
-
-
-
 
 
 def modify_nc1(filepath):
@@ -143,13 +147,14 @@ def main():
     if not idstv_files and not nc1_files:
         print("No .idstv or .nc1 files found in the specified directory.")
         return
+    for file in nc1_files:
+        modify_nc1(file)
 
     for file in idstv_files:
         process_idstv_files_in_directory_updated(directory)
     
-    for file in nc1_files:
-        modify_nc1(file)
-        
-    rename_nc1_files(directory) 
+    
+
+    
 if __name__ == "__main__":
     main()
