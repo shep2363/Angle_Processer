@@ -1,29 +1,93 @@
 import re
 import os
+import time
 
-def modify_idstv(filepath):
-    with open(filepath, 'r') as file:
-        lines = file.readlines()
 
-    # Check line 10 for the presence of <ProfileType>L</ProfileType>
-    if len(lines) > 10 and "<ProfileType>L</ProfileType>" in lines[9]:
-        length_pattern = re.compile(r'<Length>(\d+)</Length>')
-        tags_to_modify = ['Filename', 'DrawingIdentification', 'PieceIdentification']
+def transform_id(value):
+    parts = value.split('-')
+    if len(parts) != 3:
+        return value  # Return original value if it doesn't match the format
 
-        for index, line in enumerate(lines):
-            length_match = length_pattern.search(line)
-            if length_match and int(length_match.group(1)) < 279:
-                for tag in tags_to_modify:
-                    start_tag = f"<{tag}>"
-                    end_tag = f"</{tag}>"
-                    if start_tag in line and end_tag in line:
-                        start = line.find(start_tag) + len(start_tag)
-                        end = line.find(end_tag)
-                        modified_value = line[start:end].replace('0', '')
-                        lines[index] = line[:start] + modified_value + line[end:]
+    # Handle each part
+    # For the first part, don't modify
+    # For the second part, remove all zeros
+    parts[1] = parts[1].replace('0', '')
+    # For the third part, remove zeros following the first character and up to any non-zero character
+    m = re.match(r'(\D)0+', parts[2])
+    if m:
+        prefix = m.group(1)  # Capture the non-digit character
+        parts[2] = prefix + parts[2][len(prefix):].lstrip('0')
 
-        with open(filepath, 'w') as file:
-            file.writelines(lines)
+    return '-'.join(parts)
+
+# Updated code based on the provided script
+
+def process_idstv_files_in_directory_updated(directory):
+    
+    idstv_files = [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(".idstv")]
+
+    for idstv_file in idstv_files:
+        while True:
+            try:
+                with open(idstv_file, 'r') as file:
+                    content = file.read()
+
+                # Process the specific tags
+                for tag in ['Filename', 'DrawingIdentification', 'PieceIdentification']:
+                    
+                    # Remove zeros between the first and last dashes
+                    def remove_inner_zeros(match):
+                        before, main_content, after = match.groups()
+                        print(before, main_content, after)
+                        # Split by dash, process inner parts and rejoin
+                        parts = main_content.split('-')
+                        
+                        if len(parts) > 2:
+                            parts[1:-1] = [part.lstrip('0') for part in parts[1:-1]]
+                            main_content = '-'.join(parts)
+                        
+                        return before + main_content + after
+                    
+                    pattern = fr'(<{tag}>)(.*?)(</{tag}>)'
+                    content = re.sub(pattern, remove_inner_zeros, content)
+
+                    # After the last dash and the first character following it, remove zeros up to the first character
+                    def remove_zeros_after_last_dash(match):
+                        before, upto_last_dash, first_char_after_dash, zeros, remaining, after = match.groups()
+                        return before + upto_last_dash + first_char_after_dash + remaining + after
+                    
+                    pattern = fr'(<{tag}>)(.*?-)(.)(0+)([^0].*?)(</{tag}>)'
+                    content = re.sub(pattern, remove_zeros_after_last_dash, content)
+                    
+
+                with open(idstv_file, 'w') as file:
+                    file.write(content)
+                break  
+            except PermissionError:
+                print(f"Waiting for file {idstv_file} to be released")
+                time.sleep(1)
+
+def main_updated():
+    directory = input("Please enter the directory containing .idstv and .nc1 files: ")
+
+    idstv_files = list_files_in_directory(directory, ".idstv")
+    nc1_files = list_files_in_directory(directory, ".nc1")
+
+    if not idstv_files and not nc1_files:
+        print("No .idstv or .nc1 files found in the specified directory.")
+        return
+
+    process_idstv_files_in_directory_updated(directory)
+    
+    for file in nc1_files:
+        modify_nc1(file)
+
+# Displaying the updated main function for clarity
+main_updated
+
+
+
+
 
 def modify_nc1(filepath):
     with open(filepath, 'r') as file:
@@ -40,16 +104,14 @@ def modify_nc1(filepath):
 
         # Check if the length_value is less than 279
         if length_value < 279:
-            # Check if lines 4 and 5 have a zero between the third last and last characters
+            # Check and modify lines 4 and 5
             for i in [3, 4]:  # Lines 4 and 5 have indices 3 and 4
-                if lines[i][-2] == '0':  # Check the second-last character for zero
-                    # Modify lines 4 and 5 to remove zeros from the first 14 characters
-                    lines[i] = lines[i][:14].replace('0', '') + lines[i][14:]
+                transformed_line = transform_id(lines[i].strip())  # Transform the entire line
+                lines[i] = transformed_line + '\n'  # Add newline character back to the modified line
 
     # Write back the modified content
     with open(filepath, 'w') as file:
         file.writelines(lines)
-
 
 def list_files_in_directory(directory, extension):
     """Return a list of filenames with the given extension in the specified directory."""
@@ -67,7 +129,7 @@ def main():
         return
 
     for file in idstv_files:
-        modify_idstv(file)
+        process_idstv_files_in_directory_updated(directory)
     
     for file in nc1_files:
         modify_nc1(file)
