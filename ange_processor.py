@@ -42,7 +42,7 @@ def process_idstv_files_in_directory(directory):
         try:
             with open(idstv_file, 'r') as file:
                 content = file.read()
-                print(content)
+                
                
                 for tag in ['Filename', 'DrawingIdentification', 'PieceIdentification']:
                     pattern = fr'(<{tag}>)(.*?)(</{tag}>)'
@@ -53,17 +53,16 @@ def process_idstv_files_in_directory(directory):
                     length_pattern = re.compile(r'<Length>(\d+)</Length>')
                     length_match = length_pattern.search(content)
                     
-                    if not length_match:
-                        break
-
-                    length = int(length_match.group(1))
-                    if length < 279:
-                        print(f"Length is less than 279 for file {idstv_file}.")
-                        with open(idstv_file, 'w') as file:
-                            file.write(content)
-                
-                rename_nc1_files(directory)
-                print(f"{idstv_file} has been processed.")
+                    if length_match:
+                        length = int(length_match.group(1))
+                        if length < 279:
+                            print(f"Length is less than 279 for file {idstv_file}.")
+                            with open(idstv_file, 'w') as file:
+                                file.write(content)
+                            print(f"{idstv_file} has been processed.")
+                        else:
+                            print(f"Length is greater than 279 for file {idstv_file}.")
+                            print(f"{idstv_file} has not been processed.")
             
         except PermissionError:
             print(f"Waiting for file {idstv_file} to be released")
