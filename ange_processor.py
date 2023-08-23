@@ -1,6 +1,7 @@
 import re
 import os
 import time
+import xml.etree.ElementTree as ET
 
 def remove_inner_zeros(match):
     before, main_content, after = match.groups()
@@ -16,30 +17,31 @@ def remove_zeros_after_last_dash(match):
 
 def process_idstv_file(filepath):
     try:
-        with open(filepath, 'r') as file:
-            content = file.read()
-        
-        length_pattern = re.compile(r'<Length>(\d+)</Length>')
-        lengths = [int(m.group(1)) for m in length_pattern.finditer(content)]
-        
-        if not lengths:
-            return print(f"Length tags not found for file {filepath}.")
-        
-        for length in lengths:
-            if length < 279:
-                print(f"Found a Length of {length} which is less than 279 for file {filepath}.")
-                for tag in ['Filename', 'DrawingIdentification', 'PieceIdentification']:
-                    pattern = fr'(<{tag}>)(.*?)(</{tag}>)'
-                    content = re.sub(pattern, lambda m: m.group(1) + transform_id(m.group(2)) + m.group(3), content)
-                
-        # Write back the modified content after all lengths are checked
-        with open(filepath, 'w') as file:
-            file.write(content)
+        tree = ET.parse(filepath)
+        root = tree.getroot()
+
+ 
+
+        for pi in root.findall(".//PI"):
+            length_element = pi.find("Length")
+            if length_element is not None:
+                length = float(length_element.text)
+                if length < 279:
+                    print(f"Found a Length of {length} which is less than 279 for file {filepath}.")
+                    for tag in ['Filename', 'DrawingIdentification', 'PieceIdentification']:
+                        tag_element = pi.find(tag)
+                        if tag_element is not None:
+                            tag_element.text = transform_id(tag_element.text)
+
+ 
+
+        tree.write(filepath, xml_declaration=True, encoding="UTF-8")
         print(f"{filepath} has been processed.")
 
-    except PermissionError:
-        print(f"Waiting for file {filepath} to be released")
-        time.sleep(1)
+ 
+
+    except (FileNotFoundError, ET.ParseError):
+        print(f"Error processing file {filepath}.")
 
 
 def process_nc1_files(directory):
@@ -78,15 +80,19 @@ def transform_id(value):
     parts = value.split('-')
     if len(parts) != 3:
         return value
-    
+
     # Remove all zeros between the first and last dash
     parts[1] = parts[1].replace('0', '')
+
+ 
 
     # Remove zeros after the last dash and after the first character up to the next character
     first_char = parts[2][0]  # Get the first character
     remaining = parts[2][1:]  # Get the remaining part
     remaining = remaining.lstrip('0')  # Remove leading zeros
     parts[2] = first_char + remaining  # Combine them back
+
+ 
 
     return '-'.join(parts)
 
