@@ -1,27 +1,7 @@
 import re
 import os
 import time
-
-
-def list_files_in_directory(directory, extension):
-    """Return a list of filenames with the given extension in the specified directory."""
-    with os.scandir(directory) as entries:
-        return [entry.path for entry in entries if entry.is_file() and entry.name.endswith(extension)]
-
-
-def transform_id(value):
-    parts = value.split('-')
-    if len(parts) != 3:
-        return value
-    
-    parts[1] = parts[1].replace('0', '')
-    
-    m = re.match(r'(\D)0+', parts[2])
-    if m:
-        prefix = m.group(1)
-        parts[2] = prefix + parts[2][len(prefix):].lstrip('0')
-
-    return '-'.join(parts)
+import xml.etree.ElementTree as ET
 
 def remove_inner_zeros(match):
     before, main_content, after = match.groups()
@@ -35,64 +15,39 @@ def remove_zeros_after_last_dash(match):
     before, upto_last_dash, first_char_after_dash, zeros, remaining, after = match.groups()
     return before + upto_last_dash + first_char_after_dash + remaining + after
 
-def process_idstv_files_in_directory(directory):
-    idstv_files = [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(".idstv")]
+def process_idstv_file(filepath):
+    try:
+        tree = ET.parse(filepath)
+        root = tree.getroot()
 
-    for idstv_file in idstv_files:
-        try:
-            with open(idstv_file, 'r') as file:
-                content = file.read()
-                print(content)
-               
-                for tag in ['Filename', 'DrawingIdentification', 'PieceIdentification']:
-                    pattern = fr'(<{tag}>)(.*?)(</{tag}>)'
-                    content = re.sub(pattern, remove_inner_zeros, content)
-                    pattern = fr'(<{tag}>)(.*?-)(.)(0+)([^0].*?)(</{tag}>)'
-                    content = re.sub(pattern, remove_zeros_after_last_dash, content)
-                    
-                    length_pattern = re.compile(r'<Length>(\d+)</Length>')
-                    length_match = length_pattern.search(content)
-                    
-                    if not length_match:
-                        break
+ 
 
-                    length = int(length_match.group(1))
-                    if length < 279:
-                        print(f"Length is less than 279 for file {idstv_file}.")
-                        with open(idstv_file, 'w') as file:
-                            file.write(content)
-                
-                rename_nc1_files(directory)
-                print(f"{idstv_file} has been processed.")
-            
-        except PermissionError:
-            print(f"Waiting for file {idstv_file} to be released")
-            time.sleep(1)
+        for pi in root.findall(".//PI"):
+            length_element = pi.find("Length")
+            if length_element is not None:
+                length = float(length_element.text)
+                if length < 279:
+                    print(f"Found a Length of {length} which is less than 279 for file {filepath}.")
+                    for tag in ['Filename', 'DrawingIdentification', 'PieceIdentification']:
+                        tag_element = pi.find(tag)
+                        if tag_element is not None:
+                            tag_element.text = transform_id(tag_element.text)
 
-def modify_nc1(filepath):
-    with open(filepath, 'r') as file:
-        lines = file.readlines()
+ 
+
+        tree.write(filepath, xml_declaration=True, encoding="UTF-8")
+        print(f"{filepath} has been processed.")
+
+ 
+
+    except (FileNotFoundError, ET.ParseError):
+        print(f"Error processing file {filepath}.")
+
+
+def process_nc1_files(directory):
+    nc1_files = [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(".nc1")]
     
-    if len(lines) > 10:
-        try:
-            length_value = float(lines[10].strip())
-        except ValueError:
-            return 1
-
-        if length_value < 279:
-            for i in [3, 4]:
-                transformed_line = transform_id(lines[i].strip())
-                lines[i] = transformed_line + '\n'
-    
-    with open(filepath, 'w') as file:
-        file.writelines(lines)
-
-def rename_nc1_files(directory):
-    nc1_files = [f for f in os.listdir(directory) if f.endswith(".nc1")]
-    
-    for filename in nc1_files:
-        filepath = os.path.join(directory, filename)
-
+    for filepath in nc1_files:
         # Read the content of the file to get the length_value
         with open(filepath, 'r') as file:
             lines = file.readlines()
@@ -102,36 +57,61 @@ def rename_nc1_files(directory):
                 length_value = float(lines[10].strip())
             except ValueError:
                 continue  # Skip the file if the length_value is not a number
-            
-            # Rename the file only if the length_value is less than 279
+
+            # Modify and rename the file only if the length_value is less than 279
             if length_value < 279:
-                new_filename = transform_id(filename)
-                new_filepath = os.path.join(directory, new_filename)
+                for i in [3, 4]:
+                    lines[i] = transform_id(lines[i].strip()) + '\n'
                 
-                os.rename(filepath, new_filepath)
+                with open(filepath, 'w') as file:
+                    file.writelines(lines)
+                    
+                new_filename = transform_id(lines[3].strip())
+                new_filepath = os.path.join(directory, new_filename + ".nc1")
+                
+                if not os.path.exists(new_filepath):  # Check if file already exists
+                    os.rename(filepath, new_filepath)
+                else:
+                    print(f"File {new_filepath} already exists. Skipping renaming.")
+
+
+
+def transform_id(value):
+    parts = value.split('-')
+    if len(parts) != 3:
+        return value
+
+    # Remove all zeros between the first and last dash
+    parts[1] = parts[1].replace('0', '')
+
+ 
+
+    # Remove zeros after the last dash and after the first character up to the next character
+    first_char = parts[2][0]  # Get the first character
+    remaining = parts[2][1:]  # Get the remaining part
+    remaining = remaining.lstrip('0')  # Remove leading zeros
+    parts[2] = first_char + remaining  # Combine them back
+
+ 
+
+    return '-'.join(parts)
+
+
 
 
 def main():
     directory = input("Please enter the directory containing .idstv and .nc1 files: ")
 
-    idstv_files = list_files_in_directory(directory, ".idstv")
-    nc1_files = list_files_in_directory(directory, ".nc1")
+    idstv_files = [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(".idstv")]
 
-    if not idstv_files and not nc1_files:
-        print("No .idstv or .nc1 files found in the specified directory.")
+    if not idstv_files:
+        print("No .idstv files found in the specified directory.")
         return
 
-    # Modify .nc1 files
-    for file in nc1_files:
-        modify_nc1(file)
+    for filepath in idstv_files:
+        process_idstv_file(filepath)
 
-    # Process .idstv files and potentially modify .nc1 filenames based on the same logic
-    process_idstv_files_in_directory(directory)
-
-    # Rename .nc1 files based on length condition
-    rename_nc1_files(directory)
-
-    
+    process_nc1_files(directory)
 
 if __name__ == "__main__":
     main()
